@@ -17,7 +17,7 @@
 
 - https://stackoverflow.com/a/78344937
 
-また、 `PyQt6` をビルドするのに `clang` が必要だった:
+また、 `PyQt6` をビルドするのに `clang` が必要だった(※WSL2のUbuntu22.04.5では何故か不要だった):
 
 ```bash
 sudo apt install clang
