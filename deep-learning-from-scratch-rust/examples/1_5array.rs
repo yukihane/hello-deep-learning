@@ -1,6 +1,6 @@
 // ref. https://docs.rs/ndarray/0.16.1/ndarray/doc/ndarray_for_numpy_users/index.html
 
-use ch01::type_of;
+use deep_learning_from_scratch::ch1::type_of;
 use ndarray::prelude::*;
 
 /// 1.5節の実行サンプル

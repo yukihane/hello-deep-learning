@@ -1,8 +1,2 @@
+pub mod ch1;
 pub mod ch2;
-
-use std::any::type_name;
-
-/// dtype の代わり。型を返す。
-pub fn type_of<T>(_: &T) -> &'static str {
-    type_name::<T>()
-}
