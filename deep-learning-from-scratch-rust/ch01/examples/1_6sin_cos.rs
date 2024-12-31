@@ -2,23 +2,25 @@ use plotters::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 描画領域の設定
-    let root = BitMapBackend::new("sine.png", (640, 480)).into_drawing_area();
+    let root = BitMapBackend::new("plot.png", (640, 480)).into_drawing_area();
     root.fill(&WHITE)?;
 
     // チャートの設定
     let mut chart = ChartBuilder::on(&root)
-        .caption("y = sin(x)", ("sans-serif", 50).into_font())
-        .margin(5)
         .x_label_area_size(30)
         .y_label_area_size(30)
-        .build_cartesian_2d(-3.14..3.14, -1.2..1.2)?;
+        .build_cartesian_2d(0.0..6.0, -1.0..1.0)?;
 
     // 軸とグリッドの描画
     chart.configure_mesh().draw()?;
 
     // sin関数の描画
     chart.draw_series(LineSeries::new(
-        (-314..314).map(|x| x as f64 / 100.0).map(|x| (x, x.sin())),
+        (0..60).map(|x| x as f64 / 10.0).map(|x| (x, x.sin())),
+        &RED,
+    ))?;
+    chart.draw_series(LineSeries::new(
+        (0..60).map(|x| x as f64 / 10.0).map(|x| (x, x.cos())),
         &RED,
     ))?;
 
