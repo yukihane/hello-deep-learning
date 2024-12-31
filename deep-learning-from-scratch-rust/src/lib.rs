@@ -1,3 +1,5 @@
+pub mod ch2;
+
 use std::any::type_name;
 
 /// dtype の代わり。型を返す。
