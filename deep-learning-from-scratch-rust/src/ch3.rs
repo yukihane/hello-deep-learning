@@ -4,8 +4,55 @@ pub mod ch3_2_2 {
 
     /// ステップ関数
     pub fn step_function(x: ArrayView1<f64>) -> Array1<f64> {
-        let iter = x.into_iter().map(|&x| if x > 0.0 { 1.0 } else { 0.0 });
-        Array::from_iter(iter)
+        x.map(|&x| if x > 0.0 { 1.0 } else { 0.0 })
+    }
+
+    pub fn step_function_for_graph(x: f64) -> f64 {
+        if x > 0.0 {
+            1.0
+        } else {
+            0.0
+        }
+    }
+}
+
+pub mod ch3_2_4 {
+    use ndarray::prelude::*;
+    use std::f64::consts::E;
+
+    /// シグモイド関数
+    pub fn sigmoid(x: ArrayView1<f64>) -> Array1<f64> {
+        x.map(|&x| 1.0 / (1.0 + E.powf(-x)))
+    }
+
+    pub fn sigmoid_for_graph(x: f64) -> f64 {
+        1.0 / (1.0 + E.powf(-x))
+    }
+}
+
+pub mod ch3_2_7 {
+    use ndarray::prelude::*;
+
+    /// ReLU 関数
+    pub fn relu(x: ArrayView1<f64>) -> Array1<f64> {
+        x.map(|&x| if x > 0.0 { x } else { 0.0 })
+    }
+
+    pub fn relu_for_graph(x: f64) -> f64 {
+        if x > 0.0 {
+            x
+        } else {
+            0.0
+        }
+    }
+}
+
+/// 3.4.2 各層における信号伝達の実装
+pub mod ch3_4_2 {
+    use ndarray::prelude::*;
+
+    pub fn identity_function(x: ArrayView1<f64>) -> Array1<f64> {
+        x.to_owned()
     }
 }
 
