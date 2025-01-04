@@ -56,6 +56,33 @@ pub mod ch3_4_2 {
     }
 }
 
+/// 3.5.1 恒等関数とソフトマックス関数
+pub mod ch3_5_1 {
+    use ndarray::prelude::*;
+
+    /// ソフトマックス関数
+    /// ch3_5_2 でオーバーフロー対策を行う
+    pub fn softmax(x: ArrayView1<f64>) -> Array1<f64> {
+        let exp_a = x.map(|&x| x.exp());
+        let sum_exp_a = exp_a.sum();
+        exp_a / sum_exp_a
+    }
+}
+
+/// 3.5.2 ソフトマックス関数の実装上の注意
+pub mod ch3_5_2 {
+    use ndarray::prelude::*;
+    use ndarray_stats::QuantileExt;
+
+    /// ソフトマックス関数(オーバーフロー対策)
+    pub fn softmax(x: ArrayView1<f64>) -> Array1<f64> {
+        let c = x.max().unwrap();
+        let exp_a = x.map(|&x| (x - c).exp());
+        let sum_exp_a = exp_a.sum();
+        exp_a / sum_exp_a
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::prelude::*;
