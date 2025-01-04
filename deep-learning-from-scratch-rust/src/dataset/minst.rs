@@ -1,7 +1,13 @@
+use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
 use lazy_static::lazy_static;
+use ndarray::prelude::*;
+use reqwest::Client;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
 
 // const URL_BASE: &str = "http://yann.lecun.com/exdb/mnist/";
 const URL_BASE: &str = "https://ossci-datasets.s3.amazonaws.com/mnist/";
@@ -15,7 +21,13 @@ lazy_static! {
         m.insert("test_label", "t10k-labels-idx1-ubyte.gz");
         m
     };
+    static ref DATASET_DIR: PathBuf = std::env::current_dir().unwrap().join("dataset");
 }
+
+const TRAIN_NUM: usize = 60000;
+const TEST_NUM: usize = 10000;
+const IMG_DIM: (usize, usize, usize) = (1, 28, 28);
+const IMG_SIZE: usize = 784;
 
 #[derive(Debug)]
 pub struct MnistData {
@@ -23,15 +35,11 @@ pub struct MnistData {
     pub labels: Vec<u8>,
 }
 
-use anyhow::Result;
-use reqwest::Client;
-
 const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:47.0) Gecko/20100101 Firefox/47.0";
 
 pub async fn download(file_name: &str) -> Result<()> {
-    let dataset_dir = std::env::current_dir()?.join("dataset");
-    let file_path = dataset_dir.join(file_name);
+    let file_path = DATASET_DIR.join(file_name);
 
     // Skip if file exists
     if file_path.exists() {
@@ -48,7 +56,7 @@ pub async fn download(file_name: &str) -> Result<()> {
     let response = client.get(&url).send().await?.bytes().await?;
 
     // Ensure directory exists
-    fs::create_dir_all(dataset_dir)?;
+    fs::create_dir_all(DATASET_DIR.as_path())?;
 
     // Write file
     fs::write(&file_path, &response)?;
@@ -57,25 +65,54 @@ pub async fn download(file_name: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn download_mnist() -> Result<MnistData, Box<dyn std::error::Error>> {
-    let client = reqwest::Client::new();
-
+pub async fn download_mnist() -> Result<()> {
     for (_, filename) in KEY_FILE.iter() {
-        let url = format!("{}{}", URL_BASE, filename);
-        let path = Path::new("data").join(filename);
-
-        if !path.exists() {
-            let bytes = client.get(&url).send().await?.bytes().await?;
-            fs::create_dir_all("data")?;
-            fs::write(&path, &bytes)?;
-        }
+        download(filename).await?;
     }
+    Ok(())
+}
 
-    // Load data implementation here
-    Ok(MnistData {
-        images: Vec::new(),
-        labels: Vec::new(),
-    })
+pub fn load_label(file_name: &str) -> Result<Array1<u8>> {
+    let file_path = DATASET_DIR.join(file_name);
+    println!("Converting {} to Array ...", file_name);
+
+    // Open gzip file and create decoder
+    let file = File::open(&file_path)
+        .with_context(|| format!("Failed to open {}", file_path.display()))?;
+    let mut decoder = GzDecoder::new(file);
+
+    // Read all bytes
+    let mut buffer = Vec::new();
+    decoder.read_to_end(&mut buffer)?;
+
+    // Skip first 8 bytes (MNIST label file header) and convert to Array1
+    let labels = Array1::from_vec(buffer[8..].to_vec());
+
+    println!("Done");
+    Ok(labels)
+}
+
+pub fn load_img(file_name: &str) -> Result<Array2<u8>> {
+    let file_path = DATASET_DIR.join(file_name);
+    println!("Converting {} to Array ...", file_name);
+
+    // Open and decode gzip file
+    let file = File::open(&file_path)
+        .with_context(|| format!("Failed to open {}", file_path.display()))?;
+    let mut decoder = GzDecoder::new(file);
+
+    // Read all bytes
+    let mut buffer = Vec::new();
+    decoder.read_to_end(&mut buffer)?;
+
+    // Skip first 16 bytes (MNIST image file header) and convert to Array2
+    let data = Array::from_shape_vec(
+        (buffer[8..].len() / IMG_SIZE, IMG_SIZE),
+        buffer[16..].to_vec(),
+    )?;
+
+    println!("Done");
+    Ok(data)
 }
 
 #[cfg(test)]
@@ -83,7 +120,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::Path;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
