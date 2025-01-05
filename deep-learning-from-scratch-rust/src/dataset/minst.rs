@@ -1,44 +1,50 @@
 use anyhow::Result;
+use enum_map::Enum;
+use enum_map::{enum_map, EnumMap};
 use flate2::read::GzDecoder;
 use lazy_static::lazy_static;
 use ndarray::Array2;
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 
-#[derive(Debug)]
-pub struct Dataset {
-    pub train_img: Array2<f32>,
-    pub train_label: Array2<f32>,
-    pub test_img: Array2<f32>,
-    pub test_label: Array2<f32>,
+// const URL_BASE: &str = "http://yann.lecun.com/exdb/mnist/";
+const URL_BASE: &str = "https://ossci-datasets.s3.amazonaws.com/mnist/";
+
+#[derive(Debug, Copy, Clone, Enum)]
+enum Key {
+    TrainImg,
+    TrainLabel,
+    TestImg,
+    TestLabel,
 }
 
-pub const TRAIN_NUM: usize = 60000;
-pub const TEST_NUM: usize = 10000;
-pub const IMG_DIM: (usize, usize, usize) = (1, 28, 28);
-pub const IMG_SIZE: usize = 784;
+static KEY_FILES: Lazy<EnumMap<Key, &'static str>> = Lazy::new(|| {
+    enum_map! {
+        Key::TrainImg => "train-images-idx3-ubyte.gz",
+        Key::TrainLabel => "train-labels-idx1-ubyte.gz",
+        Key::TestImg => "t10k-images-idx3-ubyte.gz",
+        Key::TestLabel => "t10k-labels-idx1-ubyte.gz",
+    }
+});
 
-const URL_BASE: &str = "https://ossci-datasets.s3.amazonaws.com/mnist/";
+static DATASET_DIR: Lazy<PathBuf> = Lazy::new(|| std::env::current_dir().unwrap().join("dataset"));
+
+const TRAIN_NUM: usize = 60_000;
+const TEST_NUM: usize = 10_000;
+const IMG_DIM: (usize, usize, usize) = (1, 28, 28);
+const IMG_SIZE: usize = 784;
+
 const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:47.0) Gecko/20100101 Firefox/47.0";
-const FILES: [&str; 4] = [
-    "train-images-idx3-ubyte.gz",
-    "train-labels-idx1-ubyte.gz",
-    "t10k-images-idx3-ubyte.gz",
-    "t10k-labels-idx1-ubyte.gz",
-];
-
-lazy_static! {
-    static ref DATASET_DIR: PathBuf = std::env::current_dir().unwrap().join("dataset");
-}
 
 pub async fn download_mnist(dataset_dir: &Path) -> Result<()> {
     let client = Client::builder().user_agent(USER_AGENT).build()?;
 
-    for file in FILES.iter() {
+    for (_, file) in KEY_FILES.iter() {
         let path = dataset_dir.join(file);
         if path.exists() {
             continue;
