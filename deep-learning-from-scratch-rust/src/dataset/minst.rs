@@ -41,11 +41,11 @@ const IMG_SIZE: usize = 784;
 const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:47.0) Gecko/20100101 Firefox/47.0";
 
-pub async fn download_mnist(dataset_dir: &Path) -> Result<()> {
+pub async fn download_mnist() -> Result<()> {
     let client = Client::builder().user_agent(USER_AGENT).build()?;
 
     for (_, file) in KEY_FILES.iter() {
-        let path = dataset_dir.join(file);
+        let path = DATASET_DIR.join(file);
         if path.exists() {
             continue;
         }
@@ -91,7 +91,7 @@ pub fn load_mnist_labels(path: &Path) -> Result<Array2<f32>> {
 pub async fn init_mnist() -> Result<()> {
     std::fs::create_dir_all(DATASET_DIR.as_path())?;
 
-    download_mnist(&DATASET_DIR).await?;
+    download_mnist().await?;
 
     let train_images = load_mnist_images(&DATASET_DIR.join("train-images-idx3-ubyte.gz"))?;
     let train_labels = load_mnist_labels(&DATASET_DIR.join("train-labels-idx1-ubyte.gz"))?;
