@@ -62,7 +62,8 @@ pub async fn download_mnist() -> Result<()> {
     Ok(())
 }
 
-pub fn load_mnist_images(path: &Path) -> Result<Array2<f32>> {
+pub fn load_mnist_images(file_name: &str) -> Result<Array2<f32>> {
+    let path = DATASET_DIR.join(file_name);
     let file = File::open(path)?;
     let mut decoder = GzDecoder::new(file);
     let mut buffer = Vec::new();
@@ -75,7 +76,8 @@ pub fn load_mnist_images(path: &Path) -> Result<Array2<f32>> {
     Ok(data)
 }
 
-pub fn load_mnist_labels(path: &Path) -> Result<Array2<f32>> {
+pub fn load_mnist_labels(file_name: &str) -> Result<Array2<f32>> {
+    let path = DATASET_DIR.join(file_name);
     let file = File::open(path)?;
     let mut decoder = GzDecoder::new(file);
     let mut buffer = Vec::new();
@@ -93,8 +95,8 @@ pub async fn init_mnist() -> Result<()> {
 
     download_mnist().await?;
 
-    let train_images = load_mnist_images(&DATASET_DIR.join("train-images-idx3-ubyte.gz"))?;
-    let train_labels = load_mnist_labels(&DATASET_DIR.join("train-labels-idx1-ubyte.gz"))?;
+    let train_images = load_mnist_images(KEY_FILES[Key::TrainImg])?;
+    let _train_labels = load_mnist_labels(KEY_FILES[Key::TrainLabel])?;
 
     println!("Loaded {} training images", train_images.shape()[0]);
     Ok(())
