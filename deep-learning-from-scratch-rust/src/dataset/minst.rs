@@ -1,103 +1,155 @@
 use anyhow::Result;
-use enum_map::Enum;
-use enum_map::{enum_map, EnumMap};
 use flate2::read::GzDecoder;
-use lazy_static::lazy_static;
-use ndarray::Array2;
-use once_cell::sync::Lazy;
-use reqwest::Client;
+use ndarray::{Array1, Array2, Array4};
+use reqwest;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::io::Write;
 use std::path::PathBuf;
 
-// const URL_BASE: &str = "http://yann.lecun.com/exdb/mnist/";
 const URL_BASE: &str = "https://ossci-datasets.s3.amazonaws.com/mnist/";
+const TRAIN_IMAGES: &str = "train-images-idx3-ubyte.gz";
+const TRAIN_LABELS: &str = "train-labels-idx1-ubyte.gz";
+const TEST_IMAGES: &str = "t10k-images-idx3-ubyte.gz";
+const TEST_LABELS: &str = "t10k-labels-idx1-ubyte.gz";
 
-#[derive(Debug, Copy, Clone, Enum)]
-enum Key {
-    TrainImg,
-    TrainLabel,
-    TestImg,
-    TestLabel,
-}
-
-static KEY_FILES: Lazy<EnumMap<Key, &'static str>> = Lazy::new(|| {
-    enum_map! {
-        Key::TrainImg => "train-images-idx3-ubyte.gz",
-        Key::TrainLabel => "train-labels-idx1-ubyte.gz",
-        Key::TestImg => "t10k-images-idx3-ubyte.gz",
-        Key::TestLabel => "t10k-labels-idx1-ubyte.gz",
-    }
-});
-
-static DATASET_DIR: Lazy<PathBuf> = Lazy::new(|| std::env::current_dir().unwrap().join("dataset"));
-
-const TRAIN_NUM: usize = 60_000;
-const TEST_NUM: usize = 10_000;
-const IMG_DIM: (usize, usize, usize) = (1, 28, 28);
+const TRAIN_NUM: usize = 60000;
+const TEST_NUM: usize = 10000;
 const IMG_SIZE: usize = 784;
+const IMG_DIMS: (usize, usize) = (28, 28);
 
-const USER_AGENT: &str =
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:47.0) Gecko/20100101 Firefox/47.0";
+fn get_cache_dir() -> PathBuf {
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    dir.push("data");
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
 
-pub async fn download_mnist() -> Result<()> {
-    let client = Client::builder().user_agent(USER_AGENT).build()?;
+async fn download_file(filename: &str) -> Result<()> {
+    let path = get_cache_dir().join(filename);
+    if path.exists() {
+        return Ok(());
+    }
 
-    for (_, file) in KEY_FILES.iter() {
-        let path = DATASET_DIR.join(file);
-        if path.exists() {
-            continue;
-        }
-        println!("Downloading {} ...", file);
-        let response = client
-            .get(&format!("{}{}", URL_BASE, file))
-            .send()
-            .await?
-            .bytes()
-            .await?;
-        std::fs::write(&path, &response)?;
-        println!("Done");
+    println!("Downloading {}...", filename);
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&format!("{}{}", URL_BASE, filename))
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await?
+        .bytes()
+        .await?;
+
+    let mut file = File::create(&path)?;
+    file.write_all(&response)?;
+    println!("Done");
+    Ok(())
+}
+
+async fn download_mnist() -> Result<()> {
+    for file in &[TRAIN_IMAGES, TRAIN_LABELS, TEST_IMAGES, TEST_LABELS] {
+        download_file(file).await?;
     }
     Ok(())
 }
 
-pub fn load_mnist_images(file_name: &str) -> Result<Array2<f32>> {
-    let path = DATASET_DIR.join(file_name);
+fn load_images(filename: &str) -> Result<Array2<f32>> {
+    println!("Converting {} to Array...", filename);
+    let path = get_cache_dir().join(filename);
     let file = File::open(path)?;
-    let mut decoder = GzDecoder::new(file);
-    let mut buffer = Vec::new();
-    decoder.read_to_end(&mut buffer)?;
+    let mut gz = GzDecoder::new(file);
+    let mut contents = Vec::new();
+    gz.read_to_end(&mut contents)?;
 
-    let data = Array2::from_shape_vec(
-        (buffer[8..].len() / IMG_SIZE, IMG_SIZE),
-        buffer[16..].iter().map(|&x| x as f32 / 255.0).collect(),
-    )?;
-    Ok(data)
+    // Skip header (16 bytes)
+    let data = &contents[16..];
+    let mut array = Array2::zeros((
+        if filename.contains("train") {
+            TRAIN_NUM
+        } else {
+            TEST_NUM
+        },
+        IMG_SIZE,
+    ));
+
+    for (i, chunk) in data.chunks(IMG_SIZE).enumerate() {
+        for (j, &byte) in chunk.iter().enumerate() {
+            array[[i, j]] = byte as f32;
+        }
+    }
+
+    println!("Done");
+    Ok(array)
 }
 
-pub fn load_mnist_labels(file_name: &str) -> Result<Array2<f32>> {
-    let path = DATASET_DIR.join(file_name);
+fn load_labels(filename: &str) -> Result<Array1<u8>> {
+    println!("Converting {} to Array...", filename);
+    let path = get_cache_dir().join(filename);
     let file = File::open(path)?;
-    let mut decoder = GzDecoder::new(file);
-    let mut buffer = Vec::new();
-    decoder.read_to_end(&mut buffer)?;
+    let mut gz = GzDecoder::new(file);
+    let mut contents = Vec::new();
+    gz.read_to_end(&mut contents)?;
 
-    let labels = Array2::from_shape_vec(
-        (buffer[8..].len(), 1),
-        buffer[8..].iter().map(|&x| x as f32).collect(),
-    )?;
-    Ok(labels)
+    // Skip header (8 bytes)
+    let data = &contents[8..];
+    let array = Array1::from_vec(data.to_vec());
+
+    println!("Done");
+    Ok(array)
 }
 
-pub async fn init_mnist() -> Result<()> {
-    std::fs::create_dir_all(DATASET_DIR.as_path())?;
+pub struct MnistDataset {
+    train_images: Array2<f32>,
+    train_images_not_flatten: Array4<f32>,
+    train_labels: Array1<u8>,
+    test_images: Array2<f32>,
+    test_images_not_flatten: Array4<f32>,
+    test_labels: Array1<u8>,
+}
 
-    download_mnist().await?;
+impl MnistDataset {
+    pub async fn new(normalize: bool, flatten: bool) -> Result<Self> {
+        download_mnist().await?;
 
-    let train_images = load_mnist_images(KEY_FILES[Key::TrainImg])?;
-    let _train_labels = load_mnist_labels(KEY_FILES[Key::TrainLabel])?;
+        let mut train_images = load_images(TRAIN_IMAGES)?;
+        let mut test_images = load_images(TEST_IMAGES)?;
+        let train_labels = load_labels(TRAIN_LABELS)?;
+        let test_labels = load_labels(TEST_LABELS)?;
 
-    println!("Loaded {} training images", train_images.shape()[0]);
-    Ok(())
+        if normalize {
+            train_images.mapv_inplace(|x| x / 255.0);
+            test_images.mapv_inplace(|x| x / 255.0);
+        }
+
+        let train_images_not_flatten = train_images
+            .clone()
+            .into_shape((TRAIN_NUM, 1, IMG_DIMS.0, IMG_DIMS.1))?;
+        let test_images_not_flatten = test_images
+            .clone()
+            .into_shape((TEST_NUM, 1, IMG_DIMS.0, IMG_DIMS.1))?;
+
+        Ok(Self {
+            train_images,
+            train_images_not_flatten,
+            train_labels,
+            test_images,
+            test_images_not_flatten,
+            test_labels,
+        })
+    }
+
+    pub fn to_one_hot(&self) -> (Array2<f32>, Array2<f32>) {
+        let train_one_hot = self.labels_to_one_hot(&self.train_labels);
+        let test_one_hot = self.labels_to_one_hot(&self.test_labels);
+        (train_one_hot, test_one_hot)
+    }
+
+    fn labels_to_one_hot(&self, labels: &Array1<u8>) -> Array2<f32> {
+        let mut one_hot = Array2::zeros((labels.len(), 10));
+        for (i, &label) in labels.iter().enumerate() {
+            one_hot[[i, label as usize]] = 1.0;
+        }
+        one_hot
+    }
 }
